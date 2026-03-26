@@ -1,0 +1,103 @@
+= RHEL 10 Automated Lab Builder
+
+This repository provides a complete toolkit for building, testing, and deploying a fully automated Red Hat Enterprise Linux (RHEL) 10 installation ISO. It uses a dynamic Kickstart configuration to handle partitioning, system setup, and post-installation tool configuration without manual intervention during the OS install.
+
+Perfect for deploying to bare-metal hardware like the MINISFORUM MS-01 Workstation or running in a virtualized lab environment.
+
+== 🌟 Features
+
+* *Automated ISO Injection:* Extracts an original RHEL ISO, injects a Kickstart file, and rebuilds the bootable image.
+* *Dynamic Storage Logic:* Includes a `%pre` script that calculates optimal swap size based on RAM and identifies the best target drive for installation (safely ignoring USB drives).
+* *Automated System Updates:* The Kickstart performs an inline `dnf upgrade redhat-release` and `dnf update` during the installation phase.
+* *Interactive Post-Install Script:* Automatically drops a script in `/root` that, when run, installs third-party tools (Chrome, VS Code, Git, YubiKey tools) and interactively prompts for your Git credentials to configure your profile and generate an ED25519 SSH key.
+* *USB Deployment Tool:* A dedicated, safeguard-heavy script to image the final ISO directly to a USB drive for physical deployment.
+* *Integrated Testing:* A dedicated script to launch the ISO in a QEMU/KVM virtual machine with UEFI and NVMe emulation.
+
+== 🛠️ Prerequisites
+
+* *Host OS:* A Linux distribution (RHEL, Fedora, or Ubuntu/Debian preferred).
+* *Source Media:* An original RHEL ISO named `RHEL_10.1.iso` located in the project root.
+* *Permissions:* Root or `sudo` privileges are required for mounting ISOs, package installation, and USB imaging.
+* *Dependencies:* The scripts will automatically attempt to install `xorriso`, `rsync`, `isomd5sum`, and `qemu-kvm` if they are missing.
+
+== 📂 File Structure
+
+[%header,cols="1,3"]
+|===
+| File | Purpose
+
+| `build-iso.sh`
+| Orchestrates the extraction, patching, and rebuilding of the RHEL ISO.
+
+| `test-iso.sh`
+| Launches a temporary QEMU VM to test the automated installation.
+
+| `write-usb.sh`
+| Safely writes the custom ISO to a physical USB drive.
+
+| `ks.cfg`
+| The Kickstart configuration defining system users, packages, storage, and post-install scripts.
+|===
+
+== 🚀 Usage
+
+=== 1. Build the Automated ISO
+Run the build script to generate the unattended installer. You can choose between a standard GUI installer or a serial-based headless build.
+
+[source,bash]
+----
+# For a standard graphical build
+sudo ./build-iso.sh
+
+# For a headless build (Serial Console)
+sudo ./build-iso.sh --headless
+----
+_The output file will be `rhel-10-lab-server-auto.iso`._
+
+=== 2. Test the Installation
+Verify the build using the provided QEMU/KVM wrapper. This script creates a temporary 40GB virtual NVMe disk for the test.
+
+[source,bash]
+----
+# Test in a GUI window
+./test-iso.sh
+
+# Test in headless mode (Press Ctrl+A, then X to exit)
+./test-iso.sh --headless
+----
+
+=== 3. Deploy to Physical Media
+When you are ready to install on physical hardware, use the imaging script. It includes safety checks to prevent you from accidentally overwriting internal NVMe/SATA drives.
+
+[source,bash]
+----
+sudo ./write-usb.sh
+----
+
+=== 4. Post-Installation Setup
+Once the server is installed and booted, log in as `root` (or use `sudo`) and run the auto-generated setup script. This will register the system, install your development tools, prompt you for your Git credentials (e.g., `squid-bomb` and your email), generate your SSH keys, and then delete itself.
+
+[source,bash]
+----
+/root/install_tools.sh
+----
+
+== ⚙️ Configuration Details
+
+=== Default User & Security
+* *Root Account:* Locked by default.
+* *Admin User:* `lab_admin`.
+* *Password:* _Configured via SHA-512 hash in `ks.cfg`_.
+* *Privileges:* The `lab_admin` user has passwordless sudo access.
+* *Security:* SELinux is set to enforcing, and the firewall is enabled with SSH access allowed.
+
+=== Storage Layout
+The installer dynamically creates the following LVM structure on the smallest available non-removable disk:
+
+* `/boot/efi` (200MB).
+* `/boot` (1024MB, XFS).
+* *LVM Volume Group (`os_disk`):*
+** `swap`: Calculated based on RAM (minimum 2GB, maximum 64GB).
+** `/`: Absorbs the remaining space.
+** `/home`: 15% of total VG space.
+** `/var`, `/tmp`, `/var/log`, `/var/log/audit`: Dedicated partitions (10-15% each) with hardened mount options (`nodev`, `nosuid`, `noexec` where applicable) for performance and STIG compliance.
