@@ -14,7 +14,7 @@ KICKSTART_FILE="ks.cfg"
 NEW_ISO="almalinux-10-lab-server-auto.iso"
 VOL_LABEL="ALMA-10-AUTO"
 OUTPUT_DIR=$(pwd)
-WORKING_DIR="/tmp/alma-iso-build"
+WORKING_DIR="./tmp/alma-iso-build"
 MOUNT_DIR=""
 
 # ------------------------------------------------------------------------------
